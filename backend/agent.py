@@ -23,7 +23,7 @@ from src.scheduler import format_time_12h, get_alerts, get_schedule_status
 
 load_dotenv()
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
 
 SYSTEM_PROMPT = """You are a health monitoring assistant for tracking medications and health readings.
