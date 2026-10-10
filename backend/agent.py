@@ -9,6 +9,11 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.tools import tool
+from backend.tools.health_info_tools import (
+    health_information_tool,
+    weather_tool,
+    air_quality_tool,
+)
 
 from src.database import (
     add_medication,
@@ -238,6 +243,11 @@ TOOLS = [
     get_current_alerts,
     get_recent_readings,
     remove_medication,
+
+    # External health APIs
+    health_information_tool,
+    weather_tool,
+    air_quality_tool,
 ]
 
 
