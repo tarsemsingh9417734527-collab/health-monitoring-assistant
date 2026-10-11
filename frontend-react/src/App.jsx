@@ -1,473 +1,401 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 
-const API = "http://127.0.0.1:8000";
+const API = "https://health-monitoring-assistant.onrender.com";
 
 function App() {
-  const [analytics, setAnalytics] = useState({
-    active_medications: 0,
-    total_doses_recorded: 0,
-    total_health_metrics: 0,
-    medications: [],
-    recent_doses: [],
-    recent_metrics: [],
-  });
-
-  const [insights, setInsights] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+  const [insights, setInsights] = useState(null);
+  const [medications, setMedications] = useState([]);
+  const [doseHistory, setDoseHistory] = useState([]);
+  const [metrics, setMetrics] = useState([]);
 
   const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [apiStatus, setApiStatus] = useState("Checking...");
 
-  const [messages, setMessages] = useState([
-    {
-      type: "ai",
-      text: "Hello! I'm your Smart Health Assistant. You can ask me about medications, health records, weather, or general health information.",
-    },
-  ]);
-
-  const [loading, setLoading] = useState(false);
-
-  const [voiceStatus, setVoiceStatus] =
-    useState("Voice assistant ready.");
-
-  const [apiStatus, setApiStatus] =
-    useState("Checking...");
-
-  useEffect(() => {
-    loadHealthData();
-  }, []);
-
-  async function loadHealthData() {
+  // Check API connection
+  const checkAPI = async () => {
     try {
-      const analyticsResponse =
-        await fetch(`${API}/analytics`);
+      const response = await fetch(`${API}/health`);
 
-      const analyticsData =
-        await analyticsResponse.json();
+      if (!response.ok) {
+        throw new Error("API error");
+      }
 
-      const insightsResponse =
-        await fetch(`${API}/insights`);
+      const data = await response.json();
 
-      const insightsData =
-        await insightsResponse.json();
-
-      setAnalytics(analyticsData);
-
-      setInsights(insightsData.insights || []);
-
-      setApiStatus("Connected ✓");
+      if (data.status === "healthy") {
+        setApiStatus("Connected");
+      } else {
+        setApiStatus("Error");
+      }
     } catch (error) {
-      console.error(error);
-      setApiStatus("Connection failed ✗");
+      console.error("API connection error:", error);
+      setApiStatus("Connection failed");
     }
-  }
+  };
 
-  async function askQuestion() {
-    const text = question.trim();
+  // Load dashboard data
+  const loadDashboard = async () => {
+    try {
+      const [
+        summaryResponse,
+        analyticsResponse,
+        insightsResponse,
+        medicationsResponse,
+        doseResponse,
+        metricsResponse
+      ] = await Promise.all([
+        fetch(`${API}/health/summary`),
+        fetch(`${API}/analytics`),
+        fetch(`${API}/insights`),
+        fetch(`${API}/medications`),
+        fetch(`${API}/dose-history`),
+        fetch(`${API}/health-metrics`)
+      ]);
 
-    if (!text || loading) {
+      if (summaryResponse.ok) {
+        setSummary(await summaryResponse.json());
+      }
+
+      if (analyticsResponse.ok) {
+        setAnalytics(await analyticsResponse.json());
+      }
+
+      if (insightsResponse.ok) {
+        setInsights(await insightsResponse.json());
+      }
+
+      if (medicationsResponse.ok) {
+        setMedications(await medicationsResponse.json());
+      }
+
+      if (doseResponse.ok) {
+        setDoseHistory(await doseResponse.json());
+      }
+
+      if (metricsResponse.ok) {
+        setMetrics(await metricsResponse.json());
+      }
+    } catch (error) {
+      console.error("Dashboard error:", error);
+    }
+  };
+
+  // Ask AI
+  const askAI = async () => {
+    if (!question.trim()) {
       return;
     }
 
-    setMessages((previous) => [
-      ...previous,
-      {
-        type: "user",
-        text: text,
-      },
-    ]);
-
-    setQuestion("");
-
-    setLoading(true);
+    setLoadingAI(true);
+    setAnswer("");
 
     try {
       const response = await fetch(`${API}/ask`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          question: text,
-        }),
+          question: question
+        })
       });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
 
       const data = await response.json();
 
-      if (response.ok) {
-        setMessages((previous) => [
-          ...previous,
-          {
-            type: "ai",
-            text: data.answer,
-          },
-        ]);
-      } else {
-        setMessages((previous) => [
-          ...previous,
-          {
-            type: "ai",
-            text: "Sorry, I couldn't process your question.",
-          },
-        ]);
-      }
+      setAnswer(data.answer);
     } catch (error) {
-      console.error(error);
-
-      setMessages((previous) => [
-        ...previous,
-        {
-          type: "ai",
-          text: "Unable to connect to the Health Assistant API.",
-        },
-      ]);
+      console.error("AI error:", error);
+      setAnswer(
+        "Unable to connect to health assistant AI. Please check your internet connection and try again."
+      );
+    } finally {
+      setLoadingAI(false);
     }
+  };
 
-    setLoading(false);
-  }
-
-  function handleEnter(event) {
-    if (event.key === "Enter") {
-      askQuestion();
-    }
-  }
-
-  function startVoiceRecognition() {
+  // Voice input
+  const startVoice = () => {
     const SpeechRecognition =
       window.SpeechRecognition ||
       window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setVoiceStatus(
-        "Voice recognition is not supported in this browser."
-      );
+      alert("Voice recognition is not supported in this browser.");
       return;
     }
 
     const recognition = new SpeechRecognition();
 
-    recognition.lang = "en-IN";
+    recognition.lang = "en-US";
     recognition.continuous = false;
     recognition.interimResults = false;
 
-    setVoiceStatus(
-      "🎤 Listening... Please speak your question."
-    );
-
-    recognition.start();
-
     recognition.onresult = (event) => {
-      const transcript =
-        event.results[0][0].transcript;
-
-      setQuestion(transcript);
-
-      setVoiceStatus(
-        "Voice converted to text. Sending to AI..."
-      );
-
-      setTimeout(() => {
-        sendVoiceQuestion(transcript);
-      }, 100);
+      const text = event.results[0][0].transcript;
+      setQuestion(text);
     };
 
     recognition.onerror = (event) => {
-      console.error(event.error);
-
-      setVoiceStatus(
-        "Voice recognition error: " + event.error
-      );
+      console.error("Voice error:", event.error);
     };
 
-    recognition.onend = () => {
-      setVoiceStatus("Voice assistant ready.");
-    };
-  }
+    recognition.start();
+  };
 
-  async function sendVoiceQuestion(text) {
-    if (!text.trim()) {
-      return;
-    }
-
-    setMessages((previous) => [
-      ...previous,
-      {
-        type: "user",
-        text: text,
-      },
-    ]);
-
-    setLoading(true);
-
-    try {
-      const response = await fetch(`${API}/ask`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          question: text,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setMessages((previous) => [
-          ...previous,
-          {
-            type: "ai",
-            text: data.answer,
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error(error);
-
-      setMessages((previous) => [
-        ...previous,
-        {
-          type: "ai",
-          text: "Unable to connect to the Health Assistant API.",
-        },
-      ]);
-    }
-
-    setLoading(false);
-  }
+  // Load everything when page opens
+  useEffect(() => {
+    checkAPI();
+    loadDashboard();
+  }, []);
 
   return (
     <div className="app">
 
+      {/* Header */}
       <header className="header">
-        <h1>Smart Health Assistant</h1>
-        <p>AI-Powered Health Insights Dashboard</p>
-      </header>
-
-      <main className="container">
-
-        {/* DASHBOARD CARDS */}
-
-        <div className="cards">
-
-          <div className="card">
-            <h3>💊 Active Medications</h3>
-            <div className="number">
-              {analytics.active_medications}
-            </div>
-          </div>
-
-          <div className="card">
-            <h3>💉 Doses Recorded</h3>
-            <div className="number">
-              {analytics.total_doses_recorded}
-            </div>
-          </div>
-
-          <div className="card">
-            <h3>📊 Health Metrics</h3>
-            <div className="number">
-              {analytics.total_health_metrics}
-            </div>
-          </div>
-
+        <div>
+          <h1>Smart Health Assistant</h1>
+          <p>AI-powered health monitoring dashboard</p>
         </div>
 
+        <div className="api-status">
+          <span
+            className={
+              apiStatus === "Connected"
+                ? "status-dot connected"
+                : "status-dot"
+            }
+          ></span>
 
-        {/* AI ASSISTANT */}
+          API Status: {apiStatus}
+        </div>
+      </header>
 
-        <section className="section">
+      {/* Main */}
+      <main className="container">
 
-          <h2>🤖 AI Health Assistant</h2>
+        {/* Analytics */}
+        <section>
+          <h2>Health Overview</h2>
 
-          <div className="chat">
+          <div className="cards">
 
-            <div className="messages">
-
-              {messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={
-                    message.type === "user"
-                      ? "message user"
-                      : "message ai"
-                  }
-                >
-                  {message.text}
-                </div>
-              ))}
-
-              {loading && (
-                <div className="message ai">
-                  Thinking...
-                </div>
-              )}
-
+            <div className="card">
+              <h3>Active Medications</h3>
+              <p className="number">
+                {summary?.active_medications ?? 0}
+              </p>
             </div>
 
+            <div className="card">
+              <h3>Doses Recorded</h3>
+              <p className="number">
+                {summary?.dose_records ?? 0}
+              </p>
+            </div>
 
-            <div className="chat-input">
+            <div className="card">
+              <h3>Health Metrics</h3>
+              <p className="number">
+                {summary?.health_metric_records ?? 0}
+              </p>
+            </div>
 
-              <input
-                type="text"
-                value={question}
-                placeholder="Ask a health question..."
-                onChange={(event) =>
-                  setQuestion(event.target.value)
-                }
-                onKeyDown={handleEnter}
-              />
+            <div className="card">
+              <h3>Total Records</h3>
+              <p className="number">
+                {analytics
+                  ? analytics.total_doses_recorded +
+                    analytics.total_health_metrics
+                  : 0}
+              </p>
+            </div>
 
-              <button
-                onClick={askQuestion}
-              >
-                Send
-              </button>
+          </div>
+        </section>
 
-              <button
-                className="voice-button"
-                onClick={startVoiceRecognition}
-              >
+        {/* AI Chat */}
+        <section className="panel">
+          <h2>AI Health Assistant</h2>
+
+          <p className="description">
+            Ask the health assistant about your stored health information,
+            medications, or health-related questions.
+          </p>
+
+          <div className="chat-box">
+
+            <textarea
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Ask something like: What medications do I have?"
+              rows="4"
+            />
+
+            <div className="button-row">
+
+              <button onClick={startVoice}>
                 🎤 Voice
               </button>
 
+              <button
+                onClick={askAI}
+                disabled={loadingAI}
+              >
+                {loadingAI ? "Thinking..." : "Ask AI"}
+              </button>
+
             </div>
-
-
-            <p className="voice-status">
-              {voiceStatus}
-            </p>
 
           </div>
 
-        </section>
-
-
-        {/* HEALTH INSIGHTS */}
-
-        <section className="section">
-
-          <h2>💡 Health Insights</h2>
-
-          {insights.length === 0 ? (
-            <div className="insight">
-              No health insights available.
+          {answer && (
+            <div className="answer">
+              <h3>AI Response</h3>
+              <p>{answer}</p>
             </div>
-          ) : (
-            insights.map((insight, index) => (
-              <div
-                className="insight"
-                key={index}
-              >
-                {insight}
-              </div>
-            ))
           )}
-
         </section>
 
+        {/* Insights */}
+        <section className="panel">
+          <h2>Health Insights</h2>
 
-        {/* MEDICATIONS */}
-
-        <section className="section">
-
-          <h2>💊 Current Medications</h2>
-
-          {analytics.medications.length === 0 ? (
-            <p>No active medications found.</p>
-          ) : (
+          {insights?.insights?.length > 0 ? (
             <ul>
-              {analytics.medications.map(
-                (medicine) => (
-                  <li key={medicine.id}>
-                    <strong>
-                      {medicine.name}
-                    </strong>{" "}
-                    -{" "}
-                    {medicine.dosage ||
-                      "No dosage"}{" "}
-                    at {medicine.time}
-                  </li>
-                )
-              )}
+              {insights.insights.map((item, index) => (
+                <li key={index}>{item}</li>
+              ))}
             </ul>
-          )}
-
-        </section>
-
-
-        {/* DOSE HISTORY */}
-
-        <section className="section">
-
-          <h2>💉 Recent Dose History</h2>
-
-          {analytics.recent_doses.length === 0 ? (
-            <p>No dose records found.</p>
           ) : (
-            <ul>
-              {analytics.recent_doses.map(
-                (dose) => (
-                  <li key={dose.id}>
-                    {dose.name} -{" "}
-                    {dose.taken_at}
-                  </li>
-                )
-              )}
-            </ul>
+            <p>No insights available.</p>
           )}
-
         </section>
 
+        {/* Medications */}
+        <section className="panel">
+          <h2>Current Medications</h2>
 
-        {/* HEALTH METRICS */}
-
-        <section className="section">
-
-          <h2>📈 Recent Health Metrics</h2>
-
-          {analytics.recent_metrics.length === 0 ? (
-            <p>No health metrics found.</p>
+          {medications.length === 0 ? (
+            <p>No active medications recorded.</p>
           ) : (
-            <ul>
-              {analytics.recent_metrics.map(
-                (metric) => (
-                  <li key={metric.id}>
-                    <strong>
-                      {metric.metric_type}
-                    </strong>
-                    : {metric.value}{" "}
-                    {metric.unit || ""}{" "}
-                    ({metric.recorded_at})
-                  </li>
-                )
-              )}
-            </ul>
-          )}
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Dosage</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
 
+                <tbody>
+                  {medications.map((medicine) => (
+                    <tr key={medicine.id}>
+                      <td>{medicine.name}</td>
+                      <td>{medicine.dosage || "-"}</td>
+                      <td>{medicine.time}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
+        {/* Dose History */}
+        <section className="panel">
+          <h2>Recent Dose History</h2>
 
-        {/* API STATUS */}
+          {doseHistory.length === 0 ? (
+            <p>No dose records available.</p>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Medicine</th>
+                    <th>Dosage</th>
+                    <th>Taken At</th>
+                  </tr>
+                </thead>
 
-        <div className="status">
+                <tbody>
+                  {doseHistory.slice(0, 10).map((dose) => (
+                    <tr key={dose.id}>
+                      <td>{dose.name}</td>
+                      <td>{dose.dosage || "-"}</td>
+                      <td>{dose.taken_at}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
-          <strong>API Status: </strong>
+        {/* Health Metrics */}
+        <section className="panel">
+          <h2>Recent Health Metrics</h2>
 
-          <span>
-            {apiStatus}
-          </span>
+          {metrics.length === 0 ? (
+            <p>No health metrics recorded.</p>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                    <th>Unit</th>
+                    <th>Recorded At</th>
+                  </tr>
+                </thead>
 
+                <tbody>
+                  {metrics.slice(0, 10).map((metric) => (
+                    <tr key={metric.id}>
+                      <td>{metric.metric_type}</td>
+                      <td>{metric.value}</td>
+                      <td>{metric.unit || "-"}</td>
+                      <td>{metric.recorded_at}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* Refresh */}
+        <div className="refresh-section">
+          <button
+            onClick={() => {
+              checkAPI();
+              loadDashboard();
+            }}
+          >
+            🔄 Refresh Dashboard
+          </button>
         </div>
 
-
-        <button
-          className="refresh"
-          onClick={loadHealthData}
-        >
-          🔄 Refresh Health Data
-        </button>
-
       </main>
+
+      {/* Footer */}
+      <footer>
+        <p>
+          Smart Health Assistant — Track B Advanced Health-Tech Project
+        </p>
+      </footer>
 
     </div>
   );
