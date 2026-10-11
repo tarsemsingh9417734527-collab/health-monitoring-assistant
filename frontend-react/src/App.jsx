@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 
-const API = "https://health-monitoring-assistant.onrender.com";
+const API = "http://127.0.0.1:8000";
 
 function App() {
   const [summary, setSummary] = useState(null);
